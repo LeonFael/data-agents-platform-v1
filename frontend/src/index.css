@@ -1,0 +1,94 @@
+/* ── Tokens de diseño ──────────────────────────────────────────────────────── */
+:root {
+  /* Paleta */
+  --bg-base:        #0E1117;
+  --bg-surface:     #161B27;
+  --bg-elevated:    #1E2535;
+  --bg-hover:       #252D3D;
+
+  --accent:         #00D4AA;
+  --accent-dim:     rgba(0, 212, 170, 0.12);
+  --accent-border:  rgba(0, 212, 170, 0.3);
+
+  --violet:         #7C6AF7;
+  --violet-dim:     rgba(124, 106, 247, 0.12);
+
+  --amber:          #F59E0B;
+  --red:            #EF4444;
+  --green:          #22C55E;
+
+  --text-primary:   #E2E8F0;
+  --text-secondary: #8892A4;
+  --text-tertiary:  #4B5568;
+
+  --border:         rgba(255,255,255,0.07);
+  --border-accent:  rgba(0,212,170,0.25);
+
+  /* Tipografía */
+  --font-ui:    'Inter', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Espaciado */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+
+  /* Sidebar */
+  --sidebar-w:  220px;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 99px; }
+
+/* ── Utilidades ────────────────────────────────────────────────────────────── */
+.mono { font-family: var(--font-mono); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.badge-teal    { background: var(--accent-dim);   color: var(--accent);  border: 1px solid var(--accent-border); }
+.badge-violet  { background: var(--violet-dim);   color: var(--violet);  border: 1px solid rgba(124,106,247,0.3); }
+.badge-amber   { background: rgba(245,158,11,.12); color: var(--amber);  border: 1px solid rgba(245,158,11,.3); }
+.badge-red     { background: rgba(239,68,68,.12);  color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
+.badge-green   { background: rgba(34,197,94,.12);  color: var(--green);  border: 1px solid rgba(34,197,94,.3); }
+.badge-gray    { background: rgba(255,255,255,.06); color: var(--text-secondary); border: 1px solid var(--border); }
+
+/* ── Animaciones ───────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes pulse-dot {
+  0%,100% { opacity:1; } 50% { opacity:.3; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-up { animation: fadeUp .35s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Entorno
+.env
+*.env.local
+
+# Archivos temporales
+/tmp/
+*.tmp
+uploads/
+
+# Node
+node_modules/
+.next/
+dist/
+.vercel/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Modelos ML (serán grandes)
+*.pkl
+*.joblib
+*.h5
