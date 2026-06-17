@@ -14,10 +14,13 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
+# allow_origins=["*"] con allow_credentials=False es la combinación
+# correcta para una API pública sin autenticación por cookie.
+# Cuando agreguemos JWT en v2 restringiremos los orígenes.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
