@@ -1,12 +1,12 @@
 import os
 import tempfile
 
-import anthropic
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.core.config import get_settings
 from app.models.schemas import AnalysisResponse, ChatRequest, ChatResponse
 from app.orchestrator.pipeline import run_analysis_pipeline
+from app.services.llm_client import get_llm_client
 
 router = APIRouter()
 settings = get_settings()
@@ -17,6 +17,23 @@ settings = get_settings()
 @router.get("/health")
 def health():
     return {"status": "ok", "version": settings.app_version}
+
+
+@router.get("/llm-status")
+def llm_status():
+    """Diagnóstico rápido: qué proveedor está configurado y si la key existe."""
+    provider = settings.llm_provider.lower()
+    has_key = (
+        bool(settings.anthropic_api_key) if provider == "claude"
+        else bool(settings.gemini_api_key) if provider == "gemini"
+        else False
+    )
+    return {
+        "provider": provider,
+        "configured": has_key,
+        "claude_key_set": bool(settings.anthropic_api_key),
+        "gemini_key_set": bool(settings.gemini_api_key),
+    }
 
 
 # ── Upload y análisis ─────────────────────────────────────────────────────────
@@ -63,10 +80,10 @@ async def upload_file(file: UploadFile = File(...)):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    if not settings.anthropic_api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY no configurada")
-
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    try:
+        client = get_llm_client()
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Construir contexto del dataset para el prompt
     s = request.dataset_summary
@@ -104,14 +121,10 @@ REGLAS:
         for m in request.history
     ] + [{"role": "user", "content": request.message}]
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=600,
-        system=system_prompt,
-        messages=messages,
-    )
-
-    reply = response.content[0].text
+    try:
+        reply = client.generate(system_prompt, messages, max_tokens=600)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error del proveedor LLM: {str(e)}")
 
     # Sugerencias contextuales simples
     suggestions = _build_suggestions(request.message, s)
