@@ -8,8 +8,10 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = True
 
-    # Anthropic
+    # LLM — proveedor activo: "claude" o "gemini"
+    llm_provider: str = "gemini"
     anthropic_api_key: str = ""
+    gemini_api_key: str = ""
 
     # Archivos
     max_file_size_mb: int = 50
@@ -25,3 +27,4 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
