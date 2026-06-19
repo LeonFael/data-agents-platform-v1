@@ -9,17 +9,24 @@ const ACCEPTED = {
   'application/json': ['.json'],
 }
 
-export default function DropZone({ onFile, loading }) {
+const MAX_FILES = 10
+
+export default function DropZone({ onFiles, loading }) {
   const [error, setError] = useState(null)
 
   const onDrop = useCallback(accepted => {
     setError(null)
-    if (accepted.length) onFile(accepted[0])
-  }, [onFile])
+    if (!accepted.length) return
+    if (accepted.length > MAX_FILES) {
+      setError(`Máximo ${MAX_FILES} archivos por carga. Seleccionaste ${accepted.length}.`)
+      return
+    }
+    onFiles(accepted)
+  }, [onFiles])
 
   const onDropRejected = useCallback(rejected => {
     const reason = rejected[0]?.errors[0]?.code
-    if (reason === 'file-too-large') setError('El archivo supera 50 MB.')
+    if (reason === 'file-too-large') setError('Uno o más archivos superan 50 MB.')
     else setError('Formato no soportado. Usa CSV, Excel o JSON.')
   }, [])
 
@@ -27,7 +34,7 @@ export default function DropZone({ onFile, loading }) {
     onDrop, onDropRejected,
     accept: ACCEPTED,
     maxSize: 50 * 1024 * 1024,
-    multiple: false,
+    multiple: true,
     disabled: loading,
   })
 
@@ -65,17 +72,17 @@ export default function DropZone({ onFile, loading }) {
         </div>
 
         {loading ? (
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Analizando archivo...</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Analizando archivos...</p>
         ) : isDragActive ? (
-          <p style={{ color: 'var(--accent)', fontSize: 14, fontWeight: 500 }}>Suelta el archivo aquí</p>
+          <p style={{ color: 'var(--accent)', fontSize: 14, fontWeight: 500 }}>Suelta los archivos aquí</p>
         ) : (
           <>
             <p style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, marginBottom: 6 }}>
-              Arrastra tu archivo o{' '}
+              Arrastra tus archivos o{' '}
               <span style={{ color: 'var(--accent)', textDecoration: 'underline' }}>selecciona desde tu equipo</span>
             </p>
             <p style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
-              CSV · Excel (.xlsx / .xls) · JSON — hasta 50 MB
+              CSV · Excel (.xlsx / .xls) · JSON — hasta 50 MB c/u · máx. {MAX_FILES} archivos
             </p>
           </>
         )}
