@@ -64,3 +64,30 @@ class AnalysisResponse(BaseModel):
     status: str
     summary: DatasetSummary | None = None
     error: str | None = None
+
+
+# ── Multi-archivo ─────────────────────────────────────────────────────────────
+
+class FileResult(BaseModel):
+    """Resultado individual de un archivo dentro de un batch."""
+    file_name: str
+    status: str                     # "completed" | "failed"
+    summary: DatasetSummary | None = None
+    error: str | None = None
+
+
+class CombineCheckResponse(BaseModel):
+    """Respuesta al verificar si varios archivos son combinables."""
+    combinable: bool
+    reason: str
+    shared_columns: list[str] = []
+    column_diff: dict[str, list[str]] = {}   # {file_name: [columnas_unicas]}
+
+
+class BatchAnalysisResponse(BaseModel):
+    """Resultado de subir varios archivos a la vez."""
+    job_id: str
+    mode: str                       # "separate" | "combined"
+    files: list[FileResult]         # siempre presente en modo "separate"
+    combined_summary: DatasetSummary | None = None   # solo si mode == "combined"
+    combine_check: CombineCheckResponse | None = None
