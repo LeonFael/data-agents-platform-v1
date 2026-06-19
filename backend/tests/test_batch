@@ -1,0 +1,139 @@
+"""
+Tests del pipeline multi-archivo.
+Ejecutar con: pytest tests/test_batch.py -v
+"""
+import os
+import sys
+
+import pandas as pd
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from app.orchestrator.pipeline import check_combinable, combine_dataframes, run_batch_pipeline
+
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def ventas_enero():
+    return pd.DataFrame({
+        "producto": ["A", "B", "C"],
+        "monto": [100, 200, 150],
+        "fecha": ["2026-01-01", "2026-01-02", "2026-01-03"],
+    })
+
+
+@pytest.fixture
+def ventas_febrero():
+    return pd.DataFrame({
+        "producto": ["A", "D"],
+        "monto": [120, 80],
+        "fecha": ["2026-02-01", "2026-02-02"],
+    })
+
+
+@pytest.fixture
+def clientes_no_relacionado():
+    return pd.DataFrame({
+        "id_cliente": [1, 2, 3],
+        "ciudad": ["Bogotá", "Medellín", "Cali"],
+        "edad": [25, 40, 33],
+    })
+
+
+# ── Tests check_combinable ───────────────────────────────────────────────────
+
+class TestCombinable:
+    def test_same_schema_is_combinable(self, ventas_enero, ventas_febrero):
+        result = check_combinable({"enero.csv": ventas_enero, "febrero.csv": ventas_febrero})
+        assert result.combinable is True
+        assert "producto" in result.shared_columns
+
+    def test_different_schema_not_combinable(self, ventas_enero, clientes_no_relacionado):
+        result = check_combinable({"ventas.csv": ventas_enero, "clientes.csv": clientes_no_relacionado})
+        assert result.combinable is False
+
+    def test_single_dataframe_not_combinable(self, ventas_enero):
+        result = check_combinable({"solo.csv": ventas_enero})
+        assert result.combinable is False
+        assert "más de un archivo" in result.reason
+
+    def test_column_diff_reported(self, ventas_enero, ventas_febrero):
+        result = check_combinable({"enero.csv": ventas_enero, "febrero.csv": ventas_febrero})
+        # Mismas columnas exactas → no debería haber diffs
+        assert result.column_diff == {}
+
+
+# ── Tests combine_dataframes ──────────────────────────────────────────────────
+
+class TestCombineDataframes:
+    def test_combined_row_count(self, ventas_enero, ventas_febrero):
+        combined = combine_dataframes({"enero.csv": ventas_enero, "febrero.csv": ventas_febrero})
+        assert len(combined) == len(ventas_enero) + len(ventas_febrero)
+
+    def test_source_file_column_added(self, ventas_enero, ventas_febrero):
+        combined = combine_dataframes({"enero.csv": ventas_enero, "febrero.csv": ventas_febrero})
+        assert "__source_file__" in combined.columns
+        assert set(combined["__source_file__"]) == {"enero.csv", "febrero.csv"}
+
+
+# ── Tests run_batch_pipeline (end-to-end con archivos reales) ─────────────────
+
+class TestBatchPipeline:
+    def test_separate_mode_returns_all_files(self, tmp_path, ventas_enero, ventas_febrero):
+        p1 = tmp_path / "enero.csv"
+        p2 = tmp_path / "febrero.csv"
+        ventas_enero.to_csv(p1, index=False)
+        ventas_febrero.to_csv(p2, index=False)
+
+        result = run_batch_pipeline(
+            {"enero.csv": str(p1), "febrero.csv": str(p2)},
+            mode="separate",
+        )
+        assert result.mode == "separate"
+        assert len(result.files) == 2
+        assert all(f.status == "completed" for f in result.files)
+
+    def test_combined_mode_merges_compatible_files(self, tmp_path, ventas_enero, ventas_febrero):
+        p1 = tmp_path / "enero.csv"
+        p2 = tmp_path / "febrero.csv"
+        ventas_enero.to_csv(p1, index=False)
+        ventas_febrero.to_csv(p2, index=False)
+
+        result = run_batch_pipeline(
+            {"enero.csv": str(p1), "febrero.csv": str(p2)},
+            mode="combined",
+        )
+        assert result.mode == "combined"
+        assert result.combined_summary is not None
+        assert result.combined_summary.rows == len(ventas_enero) + len(ventas_febrero)
+
+    def test_combined_mode_falls_back_when_incompatible(self, tmp_path, ventas_enero, clientes_no_relacionado):
+        p1 = tmp_path / "ventas.csv"
+        p2 = tmp_path / "clientes.csv"
+        ventas_enero.to_csv(p1, index=False)
+        clientes_no_relacionado.to_csv(p2, index=False)
+
+        result = run_batch_pipeline(
+            {"ventas.csv": str(p1), "clientes.csv": str(p2)},
+            mode="combined",
+        )
+        # Fallback automático: no combinable -> separate
+        assert result.mode == "separate"
+        assert result.combined_summary is None
+        assert result.combine_check.combinable is False
+
+    def test_single_corrupt_file_does_not_break_batch(self, tmp_path, ventas_enero):
+        good = tmp_path / "bueno.csv"
+        bad = tmp_path / "malo.pdf"  # extensión no soportada
+        ventas_enero.to_csv(good, index=False)
+        bad.write_text("contenido no parseable")
+
+        result = run_batch_pipeline(
+            {"bueno.csv": str(good), "malo.pdf": str(bad)},
+            mode="separate",
+        )
+        statuses = {f.file_name: f.status for f in result.files}
+        assert statuses["bueno.csv"] == "completed"
+        assert statuses["malo.pdf"] == "failed"
