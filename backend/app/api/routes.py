@@ -1,11 +1,11 @@
 import os
 import tempfile
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.core.config import get_settings
-from app.models.schemas import AnalysisResponse, ChatRequest, ChatResponse
-from app.orchestrator.pipeline import run_analysis_pipeline
+from app.models.schemas import AnalysisResponse, BatchAnalysisResponse, ChatRequest, ChatResponse
+from app.orchestrator.pipeline import run_analysis_pipeline, run_batch_pipeline
 from app.services.llm_client import get_llm_client
 
 router = APIRouter()
@@ -74,6 +74,53 @@ async def upload_file(file: UploadFile = File(...)):
         # Limpiar archivo temporal siempre
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+
+@router.post("/upload-batch", response_model=BatchAnalysisResponse)
+async def upload_batch(
+    files: list[UploadFile] = File(...),
+    mode: str = Form("separate"),   # "separate" | "combined"
+):
+    if len(files) < 1:
+        raise HTTPException(status_code=400, detail="No se recibieron archivos.")
+    if len(files) > 10:
+        raise HTTPException(status_code=400, detail="Máximo 10 archivos por lote.")
+    if mode not in ("separate", "combined"):
+        raise HTTPException(status_code=400, detail="mode debe ser 'separate' o 'combined'.")
+
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    tmp_paths: dict[str, str] = {}
+
+    try:
+        for f in files:
+            ext = os.path.splitext(f.filename)[-1].lower()
+            if ext not in settings.allowed_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"'{f.filename}': formato '{ext}' no soportado. "
+                           f"Usa: {', '.join(settings.allowed_extensions)}",
+                )
+
+            content = await f.read()
+            size_mb = len(content) / (1024 * 1024)
+            if size_mb > settings.max_file_size_mb:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"'{f.filename}' supera {settings.max_file_size_mb} MB.",
+                )
+
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=ext, dir=settings.upload_dir,
+            ) as tmp:
+                tmp.write(content)
+                tmp_paths[f.filename] = tmp.name
+
+        return run_batch_pipeline(tmp_paths, mode=mode)
+
+    finally:
+        for path in tmp_paths.values():
+            if os.path.exists(path):
+                os.unlink(path)
 
 
 # ── Chat con el agente ────────────────────────────────────────────────────────
