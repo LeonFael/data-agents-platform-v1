@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
 
+    # Base de datos — Railway inyecta esta variable al enlazar el plugin Postgres
+    database_url: str = "sqlite:///./local_dev.db"   # fallback para desarrollo sin Postgres
+
+    # Auth — IMPORTANTE: define JWT_SECRET en producción (Railway).
+    # Este default fijo es SOLO para desarrollo local sin .env configurado.
+    jwt_secret: str = "dev-only-secret-CHANGE-IN-PRODUCTION-via-env-var"
+
     # Archivos
     max_file_size_mb: int = 50
     upload_dir: str = "/tmp/data_agents_uploads"
@@ -27,4 +34,3 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
-
