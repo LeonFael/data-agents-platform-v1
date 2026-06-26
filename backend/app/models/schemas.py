@@ -69,27 +69,24 @@ class AnalysisResponse(BaseModel):
 # ── Multi-archivo ─────────────────────────────────────────────────────────────
 
 class FileResult(BaseModel):
-    """Resultado individual de un archivo dentro de un batch."""
     file_name: str
-    status: str                     # "completed" | "failed"
+    status: str
     summary: DatasetSummary | None = None
     error: str | None = None
 
 
 class CombineCheckResponse(BaseModel):
-    """Respuesta al verificar si varios archivos son combinables."""
     combinable: bool
     reason: str
     shared_columns: list[str] = []
-    column_diff: dict[str, list[str]] = {}   # {file_name: [columnas_unicas]}
+    column_diff: dict[str, list[str]] = {}
 
 
 class BatchAnalysisResponse(BaseModel):
-    """Resultado de subir varios archivos a la vez."""
     job_id: str
-    mode: str                       # "separate" | "combined"
-    files: list[FileResult]         # siempre presente en modo "separate"
-    combined_summary: DatasetSummary | None = None   # solo si mode == "combined"
+    mode: str
+    files: list[FileResult]
+    combined_summary: DatasetSummary | None = None
     combine_check: CombineCheckResponse | None = None
 
 
@@ -134,15 +131,14 @@ class HistoryItem(BaseModel):
 # ── Agente Ingeniero de Datos ──────────────────────────────────────────────────
 
 class CleaningSuggestion(BaseModel):
-    """Una sugerencia de transformación que el agente propone, sin aplicar todavía."""
-    id: str                          # identificador único de la sugerencia (ej. "nulls_edad")
-    category: str                    # "nulls" | "duplicates" | "outliers"
-    column: str | None = None        # None si aplica a todo el dataset (ej. duplicados)
-    title: str                       # ej. "12% de nulos en 'edad'"
-    description: str                 # explicación en lenguaje natural de por qué se sugiere
-    recommended_action: str          # ej. "impute_median", "drop_rows", "drop_column"
-    available_actions: list[str]     # todas las acciones que el usuario puede elegir
-    severity: str                    # "low" | "medium" | "high"
+    id: str
+    category: str
+    column: str | None = None
+    title: str
+    description: str
+    recommended_action: str
+    available_actions: list[str]
+    severity: str
     affected_rows: int
 
 
@@ -155,16 +151,16 @@ class StartEngineerSessionResponse(BaseModel):
 class ApplyActionRequest(BaseModel):
     session_id: str
     suggestion_id: str
-    action: str                      # una de las available_actions de esa sugerencia
+    action: str
 
 
 class ApplyActionResponse(BaseModel):
     session_id: str
-    applied: dict                    # detalle de qué se hizo y su efecto (filas afectadas, etc.)
+    applied: dict
     summary_before: DatasetSummary
     summary_after: DatasetSummary
     remaining_suggestions: list[CleaningSuggestion]
-    applied_log: list[dict]          # historial acumulado de transformaciones en esta sesión
+    applied_log: list[dict]
 
 
 class UndoRequest(BaseModel):
@@ -173,4 +169,4 @@ class UndoRequest(BaseModel):
 
 class EngineerExportRequest(BaseModel):
     session_id: str
-    format: str = "csv"              # "csv" | "xlsx"
+    format: str = "csv"
