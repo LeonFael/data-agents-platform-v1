@@ -1,13 +1,19 @@
-import { BarChart2, Wrench, Brain, FileText, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { BarChart2, Wrench, Brain, FileText, ChevronRight, ChevronDown, LogOut, User as UserIcon, LogIn } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import HistoryPanel from './HistoryPanel'
 
 const agents = [
   { id: 'analyst',   icon: BarChart2,  label: 'Analista',   sub: 'EDA · Stats · Insights', status: 'active' },
-  { id: 'engineer',  icon: Wrench,     label: 'Ingeniero',  sub: 'Pipelines · Limpieza',    status: 'soon' },
+  { id: 'engineer',  icon: Wrench,     label: 'Ingeniero',  sub: 'Pipelines · Limpieza',    status: 'active' },
   { id: 'scientist', icon: Brain,      label: 'Científico', sub: 'ML · Predicciones',        status: 'soon' },
   { id: 'narrator',  icon: FileText,   label: 'Narrador',   sub: 'Reportes · PDF',           status: 'soon' },
 ]
 
-export default function Sidebar({ activeAgent, onSelectAgent }) {
+export default function Sidebar({ activeAgent, onSelectAgent, onSelectHistorySummary, onRequestLogin }) {
+  const { isAuthenticated, user, logout } = useAuth()
+  const [historyOpen, setHistoryOpen] = useState(true)
+
   return (
     <aside style={{
       width: 'var(--sidebar-w)',
@@ -34,14 +40,14 @@ export default function Sidebar({ activeAgent, onSelectAgent }) {
               DataAgents
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-              v1.0
+              v1.1
             </div>
           </div>
         </div>
       </div>
 
       {/* Agentes */}
-      <nav style={{ padding: '12px 8px', flex: 1 }}>
+      <nav style={{ padding: '12px 8px' }}>
         <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', padding: '0 8px 8px' }}>
           Agentes
         </div>
@@ -100,14 +106,76 @@ export default function Sidebar({ activeAgent, onSelectAgent }) {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Historial — solo si está autenticado */}
+      {isAuthenticated && (
+        <div style={{ flex: 1, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <button
+            onClick={() => setHistoryOpen(o => !o)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              padding: '4px 16px 8px', border: 'none', background: 'transparent',
+              cursor: 'pointer', fontFamily: 'var(--font-ui)',
+            }}
+          >
+            {historyOpen ? <ChevronDown size={11} color="var(--text-tertiary)" /> : <ChevronRight size={11} color="var(--text-tertiary)" />}
+            <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Historial
+            </span>
+          </button>
+          {historyOpen && (
+            <HistoryPanel onSelectSummary={onSelectHistorySummary} />
+          )}
+        </div>
+      )}
+      {!isAuthenticated && <div style={{ flex: 1 }} />}
+
+      {/* Footer: usuario o login */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-          Plataforma multiagente
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
-          Python · FastAPI · Claude
-        </div>
+        {isAuthenticated ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 600, color: 'var(--accent)',
+            }}>
+              {(user?.full_name || user?.email || '?')[0].toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.full_name || user?.email}
+              </div>
+            </div>
+            <button
+              onClick={logout}
+              title="Cerrar sesión"
+              style={{
+                width: 24, height: 24, borderRadius: 6, border: 'none',
+                background: 'transparent', color: 'var(--text-tertiary)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--red)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
+            >
+              <LogOut size={13} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onRequestLogin}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '7px', borderRadius: 8, border: '1px solid var(--border)',
+              background: 'transparent', color: 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-ui)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >
+            <LogIn size={12} /> Iniciar sesión
+          </button>
+        )}
       </div>
     </aside>
   )
