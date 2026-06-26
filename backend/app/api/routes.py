@@ -1,18 +1,27 @@
+import json
 import os
 import tempfile
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.schemas import AnalysisResponse, BatchAnalysisResponse, ChatRequest, ChatResponse
+from app.core.database import get_db
+from app.models.db_models import AnalysisHistory, User
+from app.models.schemas import (
+    AnalysisResponse,
+    BatchAnalysisResponse,
+    ChatRequest,
+    ChatResponse,
+    HistoryItem,
+)
 from app.orchestrator.pipeline import run_analysis_pipeline, run_batch_pipeline
+from app.services.auth_dependencies import get_current_user, get_current_user_optional
 from app.services.llm_client import get_llm_client
 
 router = APIRouter()
 settings = get_settings()
 
-
-# ── Health check ──────────────────────────────────────────────────────────────
 
 @router.get("/health")
 def health():
@@ -21,7 +30,6 @@ def health():
 
 @router.get("/llm-status")
 def llm_status():
-    """Diagnóstico rápido: qué proveedor está configurado y si la key existe."""
     provider = settings.llm_provider.lower()
     has_key = (
         bool(settings.anthropic_api_key) if provider == "claude"
@@ -36,11 +44,31 @@ def llm_status():
     }
 
 
+# ── Helper: guardar en historial si hay usuario logueado ─────────────────────
+
+def _save_to_history(db: Session, user: User | None, summary) -> None:
+    if user is None or summary is None:
+        return
+    entry = AnalysisHistory(
+        user_id=user.id,
+        file_name=summary.file_name,
+        file_type=summary.file_type,
+        rows=summary.rows,
+        columns=summary.columns,
+        summary_json=summary.model_dump_json(),
+    )
+    db.add(entry)
+    db.commit()
+
+
 # ── Upload y análisis ─────────────────────────────────────────────────────────
 
 @router.post("/upload", response_model=AnalysisResponse)
-async def upload_file(file: UploadFile = File(...)):
-    # Validar extensión
+async def upload_file(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
+):
     ext = os.path.splitext(file.filename)[-1].lower()
     if ext not in settings.allowed_extensions:
         raise HTTPException(
@@ -48,7 +76,6 @@ async def upload_file(file: UploadFile = File(...)):
             detail=f"Formato '{ext}' no soportado. Usa: {', '.join(settings.allowed_extensions)}",
         )
 
-    # Validar tamaño (leer en memoria para revisar antes de guardar)
     content = await file.read()
     size_mb = len(content) / (1024 * 1024)
     if size_mb > settings.max_file_size_mb:
@@ -57,21 +84,19 @@ async def upload_file(file: UploadFile = File(...)):
             detail=f"Archivo demasiado grande ({size_mb:.1f} MB). Máximo: {settings.max_file_size_mb} MB",
         )
 
-    # Guardar en archivo temporal
     os.makedirs(settings.upload_dir, exist_ok=True)
     with tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=ext,
-        dir=settings.upload_dir,
+        delete=False, suffix=ext, dir=settings.upload_dir,
     ) as tmp:
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
         result = run_analysis_pipeline(tmp_path, file.filename)
+        if result.status == "completed":
+            _save_to_history(db, current_user, result.summary)
         return result
     finally:
-        # Limpiar archivo temporal siempre
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
@@ -79,7 +104,9 @@ async def upload_file(file: UploadFile = File(...)):
 @router.post("/upload-batch", response_model=BatchAnalysisResponse)
 async def upload_batch(
     files: list[UploadFile] = File(...),
-    mode: str = Form("separate"),   # "separate" | "combined"
+    mode: str = Form("separate"),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
 ):
     if len(files) < 1:
         raise HTTPException(status_code=400, detail="No se recibieron archivos.")
@@ -115,7 +142,16 @@ async def upload_batch(
                 tmp.write(content)
                 tmp_paths[f.filename] = tmp.name
 
-        return run_batch_pipeline(tmp_paths, mode=mode)
+        result = run_batch_pipeline(tmp_paths, mode=mode)
+
+        if result.mode == "combined" and result.combined_summary:
+            _save_to_history(db, current_user, result.combined_summary)
+        else:
+            for file_result in result.files:
+                if file_result.status == "completed":
+                    _save_to_history(db, current_user, file_result.summary)
+
+        return result
 
     finally:
         for path in tmp_paths.values():
@@ -123,7 +159,51 @@ async def upload_batch(
                 os.unlink(path)
 
 
-# ── Chat con el agente ────────────────────────────────────────────────────────
+# ── Historial ─────────────────────────────────────────────────────────────────
+
+@router.get("/history", response_model=list[HistoryItem])
+def get_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 50,
+):
+    rows = (
+        db.query(AnalysisHistory)
+        .filter(AnalysisHistory.user_id == current_user.id)
+        .order_by(AnalysisHistory.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        HistoryItem(
+            id=r.id,
+            file_name=r.file_name,
+            file_type=r.file_type,
+            rows=r.rows,
+            columns=r.columns,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/history/{history_id}")
+def get_history_detail(
+    history_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    entry = (
+        db.query(AnalysisHistory)
+        .filter(AnalysisHistory.id == history_id, AnalysisHistory.user_id == current_user.id)
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Análisis no encontrado.")
+    return json.loads(entry.summary_json)
+
+
+# ── Chat ──────────────────────────────────────────────────────────────────────
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -132,7 +212,6 @@ async def chat(request: ChatRequest):
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Construir contexto del dataset para el prompt
     s = request.dataset_summary
     col_lines = "\n".join(
         f"  - {c.name} ({'numérica' if c.is_numeric else 'categórica'}): "
@@ -162,7 +241,6 @@ REGLAS:
 - Máximo 3-4 oraciones por respuesta
 - Si no puedes responder con los datos disponibles, dilo claramente"""
 
-    # Convertir historial
     messages = [
         {"role": m.role, "content": m.content}
         for m in request.history
@@ -173,14 +251,12 @@ REGLAS:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error del proveedor LLM: {str(e)}")
 
-    # Sugerencias contextuales simples
     suggestions = _build_suggestions(request.message, s)
 
     return ChatResponse(reply=reply, suggestions=suggestions)
 
 
 def _build_suggestions(last_message: str, summary) -> list[str]:
-    """Genera sugerencias de seguimiento según el contexto."""
     base = [
         "¿Cuáles son los valores más frecuentes?",
         "¿Qué columna tiene más valores nulos?",
@@ -191,5 +267,4 @@ def _build_suggestions(last_message: str, summary) -> list[str]:
         base.append("¿Hay correlación entre las variables numéricas?")
     if summary.categorical_cols > 0:
         base.append("¿Cuál es la distribución de las categorías?")
-    # Rotar para no mostrar siempre los mismos
     return base[:3]
