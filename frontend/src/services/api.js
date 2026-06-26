@@ -8,9 +8,6 @@ const api = axios.create({
 })
 
 // ── Token dinámico ────────────────────────────────────────────────────────────
-// AuthContext llama a setAuthToken() cada vez que el token cambia (login/logout).
-// Así cualquier función de este archivo queda automáticamente autenticada
-// sin tener que pasar el header manualmente en cada llamada.
 let currentToken = null
 
 export function setAuthToken(token) {
@@ -125,4 +122,3 @@ export async function exportEngineerCode(sessionId) {
 }
 
 export default api
-
