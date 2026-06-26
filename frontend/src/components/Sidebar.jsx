@@ -24,7 +24,6 @@ export default function Sidebar({ activeAgent, onSelectAgent, onSelectHistorySum
       flexDirection: 'column',
       flexShrink: 0,
     }}>
-      {/* Logo */}
       <div style={{ padding: '20px 16px 16px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
@@ -46,7 +45,6 @@ export default function Sidebar({ activeAgent, onSelectAgent, onSelectHistorySum
         </div>
       </div>
 
-      {/* Agentes */}
       <nav style={{ padding: '12px 8px' }}>
         <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', padding: '0 8px 8px' }}>
           Agentes
@@ -106,7 +104,6 @@ export default function Sidebar({ activeAgent, onSelectAgent, onSelectHistorySum
         })}
       </nav>
 
-      {/* Historial — solo si está autenticado */}
       {isAuthenticated && (
         <div style={{ flex: 1, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
           <button
@@ -129,7 +126,6 @@ export default function Sidebar({ activeAgent, onSelectAgent, onSelectHistorySum
       )}
       {!isAuthenticated && <div style={{ flex: 1 }} />}
 
-      {/* Footer: usuario o login */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
         {isAuthenticated ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
