@@ -91,3 +91,86 @@ class BatchAnalysisResponse(BaseModel):
     files: list[FileResult]         # siempre presente en modo "separate"
     combined_summary: DatasetSummary | None = None   # solo si mode == "combined"
     combine_check: CombineCheckResponse | None = None
+
+
+# ── Autenticación ─────────────────────────────────────────────────────────────
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    full_name: str | None = None
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class UserPublic(BaseModel):
+    id: str
+    email: str
+    full_name: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserPublic
+
+
+class HistoryItem(BaseModel):
+    id: str
+    file_name: str
+    file_type: str | None = None
+    rows: int | None = None
+    columns: int | None = None
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+# ── Agente Ingeniero de Datos ──────────────────────────────────────────────────
+
+class CleaningSuggestion(BaseModel):
+    """Una sugerencia de transformación que el agente propone, sin aplicar todavía."""
+    id: str                          # identificador único de la sugerencia (ej. "nulls_edad")
+    category: str                    # "nulls" | "duplicates" | "outliers"
+    column: str | None = None        # None si aplica a todo el dataset (ej. duplicados)
+    title: str                       # ej. "12% de nulos en 'edad'"
+    description: str                 # explicación en lenguaje natural de por qué se sugiere
+    recommended_action: str          # ej. "impute_median", "drop_rows", "drop_column"
+    available_actions: list[str]     # todas las acciones que el usuario puede elegir
+    severity: str                    # "low" | "medium" | "high"
+    affected_rows: int
+
+
+class StartEngineerSessionResponse(BaseModel):
+    session_id: str
+    summary: DatasetSummary
+    suggestions: list[CleaningSuggestion]
+
+
+class ApplyActionRequest(BaseModel):
+    session_id: str
+    suggestion_id: str
+    action: str                      # una de las available_actions de esa sugerencia
+
+
+class ApplyActionResponse(BaseModel):
+    session_id: str
+    applied: dict                    # detalle de qué se hizo y su efecto (filas afectadas, etc.)
+    summary_before: DatasetSummary
+    summary_after: DatasetSummary
+    remaining_suggestions: list[CleaningSuggestion]
+    applied_log: list[dict]          # historial acumulado de transformaciones en esta sesión
+
+
+class UndoRequest(BaseModel):
+    session_id: str
+
+
+class EngineerExportRequest(BaseModel):
+    session_id: str
+    format: str = "csv"              # "csv" | "xlsx"
